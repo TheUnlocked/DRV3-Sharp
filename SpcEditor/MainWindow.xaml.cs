@@ -21,19 +21,78 @@ namespace SpcEditor
     /// </summary>
     public partial class MainWindow : Window
     {
-        private string currentSPCFilename;
-        private SpcFile currentSPC;
+        // These are only temporarily null, and all null checks are made
+        // before any logic on them can execute (with the CanXXXX functions)
+        private string currentSPCFilename = null!;
+        private SpcFile currentSPC = null!;
+
+        private FileSystemWatcher fsWatch = null!;
+        private string tmpFilesDir = null!;
 
         public MainWindow()
         {
             InitializeComponent();
 
-            CommandBindings.Add(new CommandBinding(SpcEditorCommands.Open, Open));
-            CommandBindings.Add(new CommandBinding(SpcEditorCommands.Save, Save, CanInteractWithFile));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Open, Open));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Save, Save, CanInteractWithFile));
             CommandBindings.Add(new CommandBinding(SpcEditorCommands.SaveAs, SaveAs, CanInteractWithFile));
             CommandBindings.Add(new CommandBinding(SpcEditorCommands.Insert, Insert, CanInteractWithFile));
             CommandBindings.Add(new CommandBinding(SpcEditorCommands.Extract, Extract, CanExtract));
             CommandBindings.Add(new CommandBinding(SpcEditorCommands.ExtractAll, ExtractAll, CanExtractAll));
+            CommandBindings.Add(new CommandBinding(SpcEditorCommands.OpenInEditor, OpenInEditor, CanExtract));
+
+            Closed += MainWindow_Closed;
+        }
+
+        private void MainWindow_Closed(object? sender, EventArgs e)
+        {
+            // Let's clean up our temp directory...
+            Directory.Delete(Path.Combine(Path.GetTempPath(), "SpcEditor"), true);
+        }
+
+        private void RefreshListViewItems()
+        {
+            if (currentSPC != null)
+            {
+                // We want to defer refreshing the view until we're on the main thread.
+                // Because of C# weirdness, you have to first store
+                // the method in a temporary variable.
+                Action refreshAction = SubFileListView.Items.Refresh;
+                Application.Current.Dispatcher.BeginInvoke(refreshAction);
+            }
+        }
+
+        private void InitFileSystemWatcher()
+        {
+            if (fsWatch != null)
+            {
+                fsWatch.Dispose();
+            }
+            tmpFilesDir = Path.Combine(Path.GetTempPath(), "SpcEditor", Path.GetFileNameWithoutExtension(currentSPCFilename));
+            Directory.CreateDirectory(tmpFilesDir);
+            // We want to see when our temporary files have changed
+            // So we can automatically update them in the SPC.
+            fsWatch = new FileSystemWatcher(tmpFilesDir);
+            fsWatch.Changed += async (sender, e) =>
+            {
+                if (currentSPC.Subfiles.Select(x => x.Name).Contains(e.Name))
+                {
+                    // Wait for file to become unlocked...
+                    while (true)
+                    {
+                        try
+                        {
+                            fsWatch.EnableRaisingEvents = false;
+                            await currentSPC.InsertSubfileAsync(e.FullPath);
+                            fsWatch.EnableRaisingEvents = true;
+                        }
+                        catch (IOException)
+                        {
+                            await Task.Delay(50);
+                        }
+                    }
+                }
+            };
         }
 
         private void Open(object sender, RoutedEventArgs e)
@@ -51,8 +110,10 @@ namespace SpcEditor
             currentSPC = new SpcFile();
             currentSPCFilename = dialog.FileName;
             currentSPC.Load(currentSPCFilename);
-            SubFileListView.ItemsSource = currentSPC.Subfiles;
             statusText.Text = $"{currentSPCFilename} loaded.";
+
+            SubFileListView.ItemsSource = currentSPC.Subfiles;
+            InitFileSystemWatcher();
         }
 
         private void CanInteractWithFile(object sender, CanExecuteRoutedEventArgs e) =>
@@ -106,6 +167,7 @@ namespace SpcEditor
                 currentSPC.InsertSubfile(filename);
             }
             statusText.Text = $"Sucessfully inserted {dialog.FileNames.Length} files.";
+            RefreshListViewItems();
         }
 
         private void CanExtract(object sender, CanExecuteRoutedEventArgs e) =>
@@ -175,26 +237,67 @@ namespace SpcEditor
             MessageBox.Show("This feature is currently not implemented. :(");
         }
 
-        private void OpenInEditorFileListContextMenu_Click(object sender, RoutedEventArgs e)
+        private void OpenInEditor(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("This feature is currently not implemented. :(");
+            if (SubFileListView.SelectedItems.Count > 1 &&
+                MessageBox.Show(
+                    "You're trying to open multiple files in editors. This could cause a large number of windows to be created. Are you sure?",
+                    "Open Files in Editor", MessageBoxButton.YesNo, MessageBoxImage.None) != MessageBoxResult.Yes)
+            {
+                return;
+            }
+
+            fsWatch.EnableRaisingEvents = false;
+
+            foreach (var subfile in SubFileListView.SelectedItems.Cast<SpcSubfile>())
+            {
+                string ext = Path.GetExtension(subfile.Name).ToLower();
+                if (!new[] { ".sfl", ".wrd" }.Contains(ext))
+                {
+                    MessageBox.Show($"{subfile.Name} does not currently have a supporting editor.");
+                    continue;
+                }
+                // We extract the file and store it in a temporary location so we can
+                // pass it to the appropriate editor.
+                try
+                {
+                    currentSPC.ExtractSubfile(subfile.Name, tmpFilesDir);
+                }
+                catch (IOException)
+                {
+                    MessageBox.Show("An IOException occurred. Try again.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                string tmpFilePath = Path.Combine(tmpFilesDir, subfile.Name);
+                Window dialog = ext switch
+                {
+                    ".sfl" => new SflEditor.MainWindow(tmpFilePath),
+                    ".wrd" => new WrdEditor.MainWindow(tmpFilePath),
+                    _ => null! // This should never be reached!
+                };
+                // But in the rare event that the editor extension list doesn't match up with the switch expression,
+                // let's add a fallback just in case.
+                if (dialog == null) 
+                {
+                    MessageBox.Show($"This application isn't properly configured to use the {ext} editor. Please contact a developer.",
+                        ":(", MessageBoxButton.OK, MessageBoxImage.Error);
+                    continue;
+                }
+                dialog.Show();
+            }
+
+            fsWatch.EnableRaisingEvents = true;
         }
     }
 
     public static class SpcEditorCommands
     {
-        public static RoutedCommand Open = new RoutedCommand("Open", typeof(SpcEditorCommands), new InputGestureCollection {
-            new KeyGesture(Key.O, ModifierKeys.Control)
-        });
-        public static RoutedCommand Save = new RoutedCommand("Save", typeof(SpcEditorCommands), new InputGestureCollection {
-            new KeyGesture(Key.S, ModifierKeys.Control)
-        });
         public static RoutedCommand SaveAs = new RoutedCommand("Save As", typeof(SpcEditorCommands), new InputGestureCollection {
             new KeyGesture(Key.S, ModifierKeys.Control | ModifierKeys.Shift)
         });
         public static RoutedCommand Insert = new RoutedCommand("Insert", typeof(SpcEditorCommands));
         public static RoutedCommand Extract = new RoutedCommand("Extract", typeof(SpcEditorCommands));
         public static RoutedCommand ExtractAll = new RoutedCommand("Extract All", typeof(SpcEditorCommands));
+        public static RoutedCommand OpenInEditor = new RoutedCommand("Open in Editor", typeof(SpcEditorCommands));
     }
 
     public sealed class CompressionStateToStringConverter : IValueConverter

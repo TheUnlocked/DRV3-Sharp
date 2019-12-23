@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:i="clr-namespace:System.Windows.Interactivity;assembly=System.Windows.Interactivity"
         xmlns:local="clr-namespace:SpcEditor"
         mc:Ignorable="d"
         Title="SPC Editor" Height="460" Width="800">
@@ -12,18 +13,23 @@
     <Grid>
         <Menu x:Name="MainMenu" Height="24" VerticalAlignment="Top">
             <MenuItem x:Name="FileMenuList" Header="_File" Height="24">
-                <MenuItem Header="_Open SPC..." Height="24" Command="local:SpcEditorCommands.Open"/>
-                <MenuItem Header="_Save SPC" Height="24" Command="local:SpcEditorCommands.Save"/>
+                <MenuItem Header="_Open SPC..." Height="24" Command="ApplicationCommands.Open"/>
+                <MenuItem Header="_Save SPC" Height="24" Command="ApplicationCommands.Save"/>
                 <MenuItem Header="Save SPC _As..." Height="24" Command="local:SpcEditorCommands.SaveAs"/>
             </MenuItem>
             <MenuItem x:Name="InsertExtractMenuList" Header="_Insert/Extract" Height="24">
                 <MenuItem Header="_Insert Files..." Height="24" Command="local:SpcEditorCommands.Insert"/>
-                <MenuItem Header="_Extract..." Height="24" Command="local:SpcEditorCommands.Extract"/>
-                <MenuItem Header="Extract _All..." Height="24" Command="local:SpcEditorCommands.ExtractAll"/>
+                <MenuItem Header="_Extract Files..." Height="24" Command="local:SpcEditorCommands.Extract"/>
+                <MenuItem Header="Extract _All Files..." Height="24" Command="local:SpcEditorCommands.ExtractAll"/>
             </MenuItem>
         </Menu>
         <ScrollViewer Name="SubFileListScrollViewer" Margin="0,24,0,24">
             <ListView Name="SubFileListView" SelectionMode="Extended" PreviewMouseWheel="SubFileListView_PreviewMouseWheel">
+                <i:Interaction.Triggers>
+                    <i:EventTrigger EventName="MouseDoubleClick">
+                        <i:InvokeCommandAction Command="local:SpcEditorCommands.OpenInEditor"/>
+                    </i:EventTrigger>
+                </i:Interaction.Triggers>
                 <ListView.View>
                     <GridView>
                         <GridViewColumn Header="Filename" DisplayMemberBinding="{Binding Name}"/>
@@ -36,7 +42,7 @@
                 </ListView.View>
                 <ListView.Resources>
                     <ContextMenu x:Key="ItemContextMenu">
-                        <MenuItem Header="Open in Editor" Click="OpenInEditorFileListContextMenu_Click"/>
+                        <MenuItem Header="Open in Editor" Command="local:SpcEditorCommands.OpenInEditor"/>
                         <MenuItem Header="Extract" Command="local:SpcEditorCommands.Extract"/>
                         <MenuItem Header="Replace" Click="ReplaceFileListContextMenu_Click"/>
                     </ContextMenu>

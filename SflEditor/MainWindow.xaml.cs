@@ -45,6 +45,11 @@ namespace SflEditor
             CommandBindings.Add(new CommandBinding(saveFileAsCmd, SaveFileAsMenuItem_Click));
         }
 
+        public MainWindow(string sflPath) : this()
+        {
+            LoadSfl(sflPath);
+        }
+
         private void NewFileMenuItem_Click(object sender, RoutedEventArgs e)
         {
 
@@ -63,9 +68,14 @@ namespace SflEditor
                 return;
             }
 
+            LoadSfl(openFileDialog.FileName);
+        }
+
+        private void LoadSfl(string path)
+        {
             loadedSfl = new SflFile();
-            loadedSfl.Load(openFileDialog.FileName);
-            loadedSflLocation = openFileDialog.FileName;
+            loadedSfl.Load(path);
+            loadedSflLocation = path;
 
             populateTreeView();
         }

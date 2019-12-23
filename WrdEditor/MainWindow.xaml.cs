@@ -46,6 +46,11 @@ namespace WrdEditor
             CommandBindings.Add(new CommandBinding(saveScriptAsCmd, SaveScriptAsMenuItem_Click));
         }
 
+        public MainWindow(string wrdPath) : this()
+        {
+            LoadWrd(wrdPath);
+        }
+
         #region Event Handlers
         private void NewScriptMenuItem_Click(object sender, RoutedEventArgs e)
         {
@@ -67,11 +72,16 @@ namespace WrdEditor
                 return;
             }
 
-            loadedWrd = new WrdFile();
-            loadedWrd.Load(openFileDialog.FileName);
-            loadedWrdLocation = openFileDialog.FileName;
+            LoadWrd(openFileDialog.FileName);
+        }
 
-            statusText.Text = $"Loaded WRD file: {new FileInfo(openFileDialog.FileName).Name}";
+        private void LoadWrd(string path)
+        {
+            loadedWrd = new WrdFile();
+            loadedWrd.Load(path);
+            loadedWrdLocation = path;
+
+            statusText.Text = $"Loaded WRD file: {new FileInfo(path).Name}";
 
             // Clear the StackPanel of old entries
             wrdCommandTextBox.Text = string.Empty;

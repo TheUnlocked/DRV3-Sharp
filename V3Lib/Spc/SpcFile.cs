@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace V3Lib.Spc
 {
@@ -130,12 +131,16 @@ namespace V3Lib.Spc
             Console.WriteLine($"ERROR: Unable to find a subfile called \"{filename}\".");
         }
 
+        public delegate bool OverwriteConfirmation();
+        public delegate Task<bool> OverwriteConfirmationAsync();
+
         /// <summary>
         /// Inserts a file into the SPC archive. If a file with the same name already exists within the archive, it will be replaced.
         /// </summary>
         /// <param name="filename">The path of the file to be inserted into the SPC archive.</param>
         /// <param name="compress">Whether the subfile should be compressed before inserting. Unless you know what you're doing, leave this set to "true".</param>
-        public void InsertSubfile(string filename, bool compress = true)
+        /// <param name="confirmation">A delegate whose output will determine whether a file will be replaced. If null, there is no confirmation.</param>
+        public void InsertSubfile(string filename, bool compress = true, OverwriteConfirmation confirmation = null)
         {
             FileInfo info = new FileInfo(filename);
 
@@ -151,15 +156,70 @@ namespace V3Lib.Spc
             {
                 if (info.Name == Subfiles[s].Name)
                 {
-                    Console.WriteLine("The specified file already exists within the SPC archive. Overwrite? (Y/N)");
-                    string yesNo = Console.ReadLine().ToLowerInvariant();
-                    if (yesNo.StartsWith("y"))
+                    if (confirmation == null || confirmation())
                     {
                         existingIndex = s;
                         break;
                     }
+                }
+            }
 
-                    return;
+            using BinaryReader reader = new BinaryReader(new FileStream(filename, FileMode.Open));
+            int subfileSize = (int)reader.BaseStream.Length;
+            SpcSubfile subfileToInject = new SpcSubfile
+            {
+                CompressionFlag = 1,
+                UnknownFlag = (short)(subfileSize > ushort.MaxValue ? 8 : 4),   // seems like this flag might relate to size? This is a BIG guess though.
+                CurrentSize = subfileSize,
+                OriginalSize = subfileSize,
+                Name = info.Name,
+                Data = reader.ReadBytes(subfileSize)
+            };
+            reader.Close();
+
+            if (compress)
+            {
+                subfileToInject.Compress();
+            }
+
+            // Check if a subfile already exists with the specified name and replace
+            if (existingIndex != -1)
+            {
+                Subfiles[existingIndex] = subfileToInject;
+                return;
+            }
+
+            // We should only reach this code if there is not an existing subfile with the same name
+            Subfiles.Add(subfileToInject);
+        }
+
+        /// <summary>
+        /// Asynchronously inserts a file into the SPC archive. If a file with the same name already exists within the archive, it will be replaced.
+        /// </summary>
+        /// <param name="filename">The path of the file to be inserted into the SPC archive.</param>
+        /// <param name="compress">Whether the subfile should be compressed before inserting. Unless you know what you're doing, leave this set to "true".</param>
+        /// <param name="confirmation">An async delegate whose output will determine whether a file will be replaced. If null, there is no confirmation.</param>
+        public async Task InsertSubfileAsync(string filename, bool compress = true, OverwriteConfirmationAsync confirmation = null)
+        {
+            FileInfo info = new FileInfo(filename);
+
+            if (!info.Exists)
+            {
+                Console.WriteLine($"ERROR: Target file\"{info.FullName}\" does not exist.");
+                return;
+            }
+
+            // Check if a subfile already exists with the specified name
+            int existingIndex = -1;
+            for (int s = 0; s < Subfiles.Count; ++s)
+            {
+                if (info.Name == Subfiles[s].Name)
+                {
+                    if (confirmation == null || await confirmation())
+                    {
+                        existingIndex = s;
+                        break;
+                    }
                 }
             }
 

@@ -165,7 +165,7 @@ namespace SpcTool
                         {
                             Console.WriteLine($"Inserting \"{subfileName}\"...");
 
-                            insertTasks[targets.IndexOf(subfileName)] = new Task(() => spc.InsertSubfile(subfileName));
+                            insertTasks[targets.IndexOf(subfileName)] = spc.InsertSubfileAsync(subfileName, confirmation: ConfirmOverwrite);
                         }
 
                         // Wait until all target subfiles have been inserted
@@ -188,6 +188,15 @@ namespace SpcTool
                 Console.Read();
             }
             
+        }
+
+#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
+        private static async Task<bool> ConfirmOverwrite()
+#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+        {
+            Console.WriteLine("The specified file already exists within the SPC archive. Overwrite? (Y/N)");
+            string yesNo = Console.ReadLine().ToLowerInvariant();
+            return yesNo.StartsWith("y");
         }
     }
 }

@@ -4,14 +4,18 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="System.Windows.Interactivity.WPF" Version="2.0.20525" />
     <PackageReference Include="WindowsAPICodePack-Shell" Version="1.1.1" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\SflEditor\SflEditor.csproj" />
     <ProjectReference Include="..\V3Lib\V3Lib.csproj" />
+    <ProjectReference Include="..\WrdEditor\WrdEditor.csproj" />
   </ItemGroup>
 
 </Project>
