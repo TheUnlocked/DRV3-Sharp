@@ -202,9 +202,9 @@ namespace SpcEditor
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
             (short)value switch
             {
-                1 => "Compressed",
-                2 => "Uncompressed",
-                3 => "N/A (External)",
+                1 => "Uncompressed",
+                2 => "Compressed",
+                3 => "N/A (External)", // I don't know if this is still accurate :P
                 short x => $"N/A (Unknown: {x})"
             };
 
