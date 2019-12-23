@@ -190,13 +190,11 @@ namespace SpcTool
             
         }
 
-#pragma warning disable CS1998 // Async method lacks 'await' operators and will run synchronously
-        private static async Task<bool> ConfirmOverwrite()
-#pragma warning restore CS1998 // Async method lacks 'await' operators and will run synchronously
+        private static Task<bool> ConfirmOverwrite()
         {
             Console.WriteLine("The specified file already exists within the SPC archive. Overwrite? (Y/N)");
             string yesNo = Console.ReadLine().ToLowerInvariant();
-            return yesNo.StartsWith("y");
+            return new Task<bool>(() => yesNo.StartsWith("y"));
         }
     }
 }
