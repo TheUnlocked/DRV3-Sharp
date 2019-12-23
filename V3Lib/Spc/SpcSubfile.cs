@@ -7,12 +7,12 @@ namespace V3Lib.Spc
 {
     public class SpcSubfile
     {
-        public string Name;
-        public byte[] Data;
-        public short CompressionFlag;
-        public short UnknownFlag;
-        public int CurrentSize;
-        public int OriginalSize;
+        public string Name { get; set; }
+        public byte[] Data { get; set; }
+        public short CompressionFlag { get; set; }
+        public short UnknownFlag { get; set; }
+        public int CurrentSize { get; set; }
+        public int OriginalSize { get; set; }
 
         public void Compress()
         {
