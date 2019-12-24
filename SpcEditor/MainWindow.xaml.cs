@@ -2,6 +2,8 @@
 using Microsoft.WindowsAPICodePack.Dialogs;
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -21,6 +23,8 @@ namespace SpcEditor
     /// </summary>
     public partial class MainWindow : Window
     {
+        private static readonly string TEMP_DIR = Path.Combine(Path.GetTempPath(), "SpcEditor");
+
         // These are only temporarily null, and all null checks are made
         // before any logic on them can execute (with the CanXXXX functions)
         private string currentSPCFilename = null!;
@@ -44,10 +48,18 @@ namespace SpcEditor
             Closed += MainWindow_Closed;
         }
 
+        public MainWindow(string spcPath) : this()
+        {
+            LoadSpc(spcPath);
+        }
+
         private void MainWindow_Closed(object? sender, EventArgs e)
         {
             // Let's clean up our temp directory...
-            Directory.Delete(Path.Combine(Path.GetTempPath(), "SpcEditor"), true);
+            if (Directory.Exists(TEMP_DIR))
+            {
+                Directory.Delete(TEMP_DIR, true);
+            }
         }
 
         private void RefreshListViewItems()
@@ -55,10 +67,7 @@ namespace SpcEditor
             if (currentSPC != null)
             {
                 // We want to defer refreshing the view until we're on the main thread.
-                // Because of C# weirdness, you have to first store
-                // the method in a temporary variable.
-                Action refreshAction = SubFileListView.Items.Refresh;
-                Application.Current.Dispatcher.BeginInvoke(refreshAction);
+                Application.Current.Dispatcher.BeginInvoke((Action)SubFileListView.Items.Refresh);
             }
         }
 
@@ -68,7 +77,7 @@ namespace SpcEditor
             {
                 fsWatch.Dispose();
             }
-            tmpFilesDir = Path.Combine(Path.GetTempPath(), "SpcEditor", Path.GetFileNameWithoutExtension(currentSPCFilename));
+            tmpFilesDir = Path.Combine(TEMP_DIR, Path.GetFileNameWithoutExtension(currentSPCFilename));
             Directory.CreateDirectory(tmpFilesDir);
             // We want to see when our temporary files have changed
             // So we can automatically update them in the SPC.
@@ -84,6 +93,10 @@ namespace SpcEditor
                         {
                             fsWatch.EnableRaisingEvents = false;
                             await currentSPC.InsertSubfileAsync(e.FullPath);
+                            if (!Directory.Exists(tmpFilesDir))
+                            {
+                                return;
+                            }
                             fsWatch.EnableRaisingEvents = true;
                         }
                         catch (IOException)
@@ -107,8 +120,13 @@ namespace SpcEditor
                 return;
             }
 
+            LoadSpc(dialog.FileName);
+        }
+
+        private void LoadSpc(string path)
+        {
             currentSPC = new SpcFile();
-            currentSPCFilename = dialog.FileName;
+            currentSPCFilename = path;
             currentSPC.Load(currentSPCFilename);
             statusText.Text = $"{currentSPCFilename} loaded.";
 
@@ -239,6 +257,7 @@ namespace SpcEditor
 
         private void OpenInEditor(object sender, RoutedEventArgs e)
         {
+            Console.WriteLine("test");
             if (SubFileListView.SelectedItems.Count > 1 &&
                 MessageBox.Show(
                     "You're trying to open multiple files in editors. This could cause a large number of windows to be created. Are you sure?",
@@ -266,23 +285,45 @@ namespace SpcEditor
                 catch (IOException)
                 {
                     MessageBox.Show("An IOException occurred. Try again.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-                string tmpFilePath = Path.Combine(tmpFilesDir, subfile.Name);
-                Window dialog = ext switch
-                {
-                    ".sfl" => new SflEditor.MainWindow(tmpFilePath),
-                    ".wrd" => new WrdEditor.MainWindow(tmpFilePath),
-                    _ => null! // This should never be reached!
-                };
-                // But in the rare event that the editor extension list doesn't match up with the switch expression,
-                // let's add a fallback just in case.
-                if (dialog == null) 
-                {
-                    MessageBox.Show($"This application isn't properly configured to use the {ext} editor. Please contact a developer.",
-                        ":(", MessageBoxButton.OK, MessageBoxImage.Error);
                     continue;
                 }
-                dialog.Show();
+
+                string tmpFilePath = Path.Combine(tmpFilesDir, subfile.Name);
+
+                try
+                {
+                    // Ideally, there could be some kind of config for where the other editors are located.
+                    // Requiring them to be in the same directory is not really ideal.
+                    Process process = ext switch
+                    {
+                        ".sfl" => Process.Start("SflEditor.exe", tmpFilePath),
+                        ".wrd" => Process.Start("WrdEditor.exe", tmpFilePath),
+                        _ => null! // This should never be reached!
+                    };
+                    // But in the rare event that the editor extension list doesn't match up with the switch expression,
+                    // let's add a fallback just in case.
+                    if (process == null)
+                    {
+                        MessageBox.Show($"This application isn't properly configured to use the {ext} editor. Please contact a developer.",
+                            ":(", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                    else
+                    {
+                        Task.Delay(10).ContinueWith(_ =>
+                        {
+                            if (process.HasExited)
+                            {
+                                // Some files are not present.
+                                MessageBox.Show($"The editor for {subfile.Name} is present, but it's missing some necessary files.");
+                            }
+                        });
+                    }
+                }
+                catch (Win32Exception)
+                {
+                    // If the desired editor isn't present, catch that and open a messagebox
+                    MessageBox.Show($"An editor exists for {subfile.Name}, but this application can't find its executable.");
+                }
             }
 
             fsWatch.EnableRaisingEvents = true;

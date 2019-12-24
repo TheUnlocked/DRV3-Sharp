@@ -5,6 +5,7 @@
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
+    <NoWarn>1701;1702;NU1701</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,9 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\SflEditor\SflEditor.csproj" />
     <ProjectReference Include="..\V3Lib\V3Lib.csproj" />
-    <ProjectReference Include="..\WrdEditor\WrdEditor.csproj" />
   </ItemGroup>
 
 </Project>
